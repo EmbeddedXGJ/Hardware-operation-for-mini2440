@@ -1,0 +1,121 @@
+.text
+.global _start
+
+_start:
+	b reset  //¸´Î»Òì³£
+	ldr pc,= undef_addr  //Î´¶¨ÒåÖ¸ÁîÒì³£ ÓÃ¾ø¶ÔÌø×ªÊÇÒòÎªÖØ¶¨Î»ÍêÖ®ºóÒì³£´¦Àíº¯Êı¿ÉÄÜÔÚÆ¬ÄÚ4kµØÖ·Ö®Íâ
+	ldr pc,= swi_addr
+	b halt 
+	b halt
+	b halt
+	ldr pc,= irq_addr
+	b halt
+		
+undef_addr:
+	.word do_undef
+
+swi_addr:
+	.word do_swi
+irq_addr:
+	.word do_irq
+	
+do_undef:  
+	/*Ö´ĞĞµ½ÕâÀïÖ®Ç°
+	 *  lr_undef(undefÒì³£µÄsp¼Ä´æÆ÷)£¬±£´æÓĞ±»ÖĞ¶ÏÇ°µÄÏÂÒ»ÌõÖ¸ÁîµÄµØÖ·
+	 * cpsr_undef±£´æ±»ÖĞ¶ÏÇ°Ä£Ê½µÄcpsr¼Ä´æÆ÷µÄÖµ
+	*/
+	/* sp_undefÎ´ÉèÖÃ*/
+	ldr sp,= 0x34000000  //ÉèÖÃÎ´¶¨ÒåÖ¸ÁîÒì³£µÄ¶ÑÕ»
+	/* ±£»¤ÏÖ³¡ */
+	stmdb sp!,{r0-r12,lr}  //ÔÚÎ´¶¨ÒåÖ¸ÁîÒì³£º¯Êı¿ÉÄÜ»áĞŞ¸Är0-r12
+	
+	/* ´¦Àíº¯Êı*/
+	bl led_test2
+
+/* »Ö¸´ÏÖ³¡ */
+	ldmia sp!,{r0-r12,pc}^  // ^·ûºÅ±íÊ¾»á°ÉspsrµÄÖµ»Ö¸´µ½cpsrÖĞ
+
+.align 4  //ËÄ×Ö½Ú¶ÔÆë
+do_swi:
+	ldr sp,= 0x33c00000 //ÉèÖÃÈíÖĞ¶ÏÏÂµÄ¶ÑÕ»
+	stmdb sp!,{r0-r12,lr} //±£»¤ÏÖ³¡
+	//mov r4,lr  //±£´ælrµ½r4ÖĞ
+	bl led_test3
+	
+	ldmia sp!,{r0-r12,pc}^  //»Ö¸´ÏÖ³¡  
+	
+.align 4
+do_irq:
+	ldr sp,= 0x32c00000 //ÉèÖÃÈíÖĞ¶ÏÏÂµÄ¶ÑÕ»
+	sub lr,lr ,#4
+	stmdb sp!,{r0-r12,lr} //±£»¤ÏÖ³¡
+	//mov r4,lr  //±£´ælrµ½r4ÖĞ
+	bl irq_handle
+	
+	ldmia sp!,{r0-r12,pc}^  //»Ö¸´ÏÖ³¡  
+		
+.align 4  //ËÄ×Ö½Ú¶ÔÆë  //ARMÖ¸Áî¼¯ÊÇÒÔËÄ×Ö½Ú¶ÔÆëµÄ
+reset:	
+	ldr   r0, =0x53000000     @ WAå£ºTCHDOGÅ’Ã„Å½Ã¦Ã†Ã·ÂµÃ˜Ã–Â·
+    mov   r1, #0x0                     
+    str   r1, [r0] 
+	
+	/* Ìá¸ßÊ±ÖÓ£¬ÉèÖÃFCLK:HCLK:PCLK=400M:100M:50M */
+	/* LOCKTIME(¸Ã¼Ä´æÆ÷ÊÇÓÃÀ´ÉÏµçÊ±ÖÓ±äÎªÎÈ¶¨µÄÊ±¼ä) */
+	ldr r0,= 0x4C000000
+	ldr r1,= 0xffffffff
+	str r1,[r0]
+	
+	/* ÉèÖÃ·ÖÆµ±È£¬CLKDIN,HCCLK = FCLK / 4,PCLK = FCLK / 8*/
+	ldr r0,= 0x40000014
+	ldr r1,= 0x5
+	str r1,[r0]
+	
+	/*MMU_SetAsyncBusMode  HCLKDIVNä¸ä¸ºé›¶çš„è¯è¦è®¾ç½®ä¸ºå¼‚æ­¥æ¨¡å¼ï¼ˆæ‰‹å†Œä¸­å¾—æ¥çš„ï¼‰*/
+	mrc p15,0,r0,c1,c0,0
+	orr r0,r0,#0xc0000000
+	mcr p15,0,r0,c1,c0,0
+	
+	/* è®¾ç½® MPLL(0x40000004) = (92<<12) | (1<<4)|(1<<0)*/
+	ldr r0,= 0x40000004
+	ldr r1,= (92<<12) | (1<<4) | (1<<0)
+	str r1,[r0]
+	
+	mov r0,#0
+	ldr r1,[r0] //¶Á³ö0µØÖ·µÄÖµ£¬±£´æÔÚr1ÖĞ
+	mov r2,#123 
+	str r2,[r0]  //½«123Ğ´Èë0µØÖ·
+	ldr r3,[r0]  //¶Á³ö0µØÖ·µÄÖµ
+	cmp r2,r3    //±È½Ï¶Á³öºÍĞ´ÈëµÄÖµÊÇ·ñÏàµÈ
+	             //ÏàµÈÔòÎªnandÆô¶¯£¬²»ÏàµÈÔòÎªnorÆô¶¯
+	ldr sp, =0x40000000+4096  //¼ÙÉèÊÇnorÆô¶¯
+  	ldreq sp,= 4096   //ÏàµÈÔòÎªnandÆô¶¯£¬
+  	streq r1,[r0]  //nandÆô¶¯£¬»Ö¸´0µØÖ·µÄÖµ
+
+	bl sdram_init  //ÔÚÖØ¶¨Î»´úÂëÖ®Ç°Òª³õÊ¼»¯sdram,·ñÔòÎŞ·¨½«Êı¾İ¶ÎÖØ¶¨Î»µ½sdramÖĞ
+
+	bl copy_to_sdram  //ÖØ¶¨Î»´úÂë
+	bl clear_bss    //Çå³ıbss¶Î
+
+	/* ¸´Î»Ö®ºócpu´¦ÓÚsvcÄ£Ê½ 
+	* ÏÖÔÚÇĞ»»µ½usr Ä£Ê½
+	*/
+	mrs r0,cpsr  /*¶Á³öcpsr*/
+	bic r0,r0,#0xf   //°ÑµÍËÄÎ»ÇåÁã
+	bic r0,r0,#(1<<7)   //Çå³şIÎª£¬Ê¹ÄÜirq×ÜÖĞ¶Ï
+	msr cpsr,r0
+	ldr sp,= 0x33f00000  //ÉèÖÃÓÃ»§Ä£Ê½(usr)ÏÂµÄ¶ÑÕ»
+	ldr pc,= sdram
+sdram:
+	bl led_gpio_init
+
+undef_code:  //ÈÏÎª¶¨ÒåÎ´¶¨ÒåÖ¸Áî
+	.word 0xdeadc0de
+
+	swi 0x123
+
+	//bl main  /* Ê¹ÓÃblÃüÁîÊÇÏà¶ÔÌø×ª */
+	ldr pc,= main /* Ê¹ÓÃ¾ø¶ÔÌø×ª²ÅÄÜµ÷µ½sdramÖĞÖ´ĞĞ*/
+
+halt:
+	b halt
